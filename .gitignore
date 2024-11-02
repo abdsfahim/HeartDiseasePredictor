@@ -12,3 +12,4 @@ env/
 # Ignore dataset and sensitive credentials
 cardio_train.csv
 config.json
+model.pkl

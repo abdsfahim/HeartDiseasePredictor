@@ -4,27 +4,43 @@ from flask import Flask, request, jsonify
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 import joblib
+import os
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Load and prepare the dataset
+# Google Drive file ID for model.pkl
+MODEL_FILE_ID = "1ncRbe4N6L74LXQn59snl6E9nmD_mf524"  # Replace this with your actual file ID
+MODEL_PATH = "model.pkl"
+SCALER_PATH = "scaler.pkl"
+
+def download_model_from_drive(file_id, destination):
+    """Download a file from Google Drive."""
+    URL = f"https://drive.google.com/uc?export=download&id={file_id}"
+    session = requests.Session()
+    response = session.get(URL, stream=True)
+
+    # Save content to the specified path
+    with open(destination, "wb") as file:
+        for chunk in response.iter_content(32768):
+            if chunk:
+                file.write(chunk)
+    print("Model downloaded successfully.")
+
+# Download the model if it doesn't exist locally
+if not os.path.exists(MODEL_PATH):
+    print("Downloading model from Google Drive...")
+    download_model_from_drive(MODEL_FILE_ID, MODEL_PATH)
+
+# Load model and scaler
+model = joblib.load(MODEL_PATH)
+scaler = joblib.load(SCALER_PATH)
+
+# Load and prepare the dataset for feature alignment
 data = pd.read_csv('cardio_train.csv', delimiter=';')
 X = data.drop(columns=['id', 'cardio'])
 y = data['cardio']
 X = pd.get_dummies(X, columns=['gender', 'cholesterol', 'gluc', 'smoke', 'alco', 'active'])
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-model = RandomForestClassifier(random_state=42)
-model.fit(X_scaled, y)
-
-# Save the model and scaler
-joblib.dump(model, 'model.pkl')
-joblib.dump(scaler, 'scaler.pkl')
-
-# Reload model and scaler
-model = joblib.load('model.pkl')
-scaler = joblib.load('scaler.pkl')
 
 # Function to fetch ThinkSpeak data
 def fetch_thinkspeak_data():
@@ -51,14 +67,15 @@ def fetch_thinkspeak_data():
 @app.route('/predict', methods=['POST'])
 def predict():
     user_data = request.get_json()
-    user_data['age'] = user_data['age'] * 365
-    user_data['height'] = user_data['height'] * 2.54
+    user_data['age'] = user_data['age'] * 365  # Convert age from years to days
+    user_data['height'] = user_data['height'] * 2.54  # Convert height from inches to cm
 
     # Fetch ThinkSpeak data
     sensor_data = fetch_thinkspeak_data()
     if not sensor_data:
         return jsonify({"error": "Failed to retrieve sensor data"}), 500
 
+    # Combine user input and sensor data
     data_input = pd.DataFrame({
         'age': [user_data['age']],
         'gender': [user_data['gender']],
@@ -73,10 +90,14 @@ def predict():
         'active': [user_data['active']]
     })
 
+    # Convert categorical variables to dummies
     data_input = pd.get_dummies(data_input, columns=['gender', 'cholesterol', 'gluc', 'smoke', 'alco', 'active'])
     data_input = data_input.reindex(columns=X.columns, fill_value=0)
+
+    # Scale the input data
     data_scaled = scaler.transform(data_input)
 
+    # Predict the result
     prediction = model.predict(data_scaled)[0]
     result = {"prediction": int(prediction)}
 
