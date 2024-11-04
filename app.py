@@ -54,6 +54,17 @@ except Exception as e:
     print("Error loading scaler:", e)
     scaler = None
 
+# Download the model if it doesn't exist locally
+if not os.path.exists(MODEL_PATH):
+    print("Downloading model from Google Drive...")
+    try:
+        download_model_from_drive(MODEL_FILE_ID, MODEL_PATH)
+        print("Download complete, file exists:", os.path.exists(MODEL_PATH))
+    except Exception as e:
+        print("Failed to download model:", e)
+else:
+    print("Model file already exists locally.")
+
 # Ensure that model and scaler are loaded before continuing
 if model is None or scaler is None:
     raise ValueError("Model or scaler failed to load. Ensure the files are available and accessible.")
