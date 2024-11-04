@@ -10,7 +10,7 @@ import os
 app = Flask(__name__)
 
 # Google Drive file ID for model.pkl
-MODEL_FILE_ID = "1ncRbe4N6L74LXQn59snl6E9nmD_mf524"  # Replace this with your actual file ID
+MODEL_FILE_ID = "17KZGINEJYO5LjYpzuoHmiy5FeSq06sMd"  # Replace this with your actual file ID
 MODEL_PATH = "model.pkl"
 SCALER_PATH = "scaler.pkl"
 
