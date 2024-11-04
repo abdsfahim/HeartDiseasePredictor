@@ -17,23 +17,36 @@ SCALER_PATH = "scaler.pkl"
 
 def download_model_from_drive(file_id, destination):
     """Download a file from Google Drive."""
-    URL = f"https://drive.google.com/uc?export=download&id={file_id}"
+    URL = "https://drive.google.com/uc?export=download"
     session = requests.Session()
-    response = session.get(URL, stream=True)
 
-    # Save content to the specified path
+    response = session.get(URL, params={'id': file_id}, stream=True)
+    response.raise_for_status()  # Raise an error for failed requests
+
+    # Google Drive may require a confirmation token for large files
+    token = None
+    for key, value in response.cookies.items():
+        if key.startswith("download_warning"):
+            token = value
+
+    if token:
+        response = session.get(URL, params={'id': file_id, 'confirm': token}, stream=True)
+
+    # Write to file in chunks
     with open(destination, "wb") as file:
         for chunk in response.iter_content(32768):
             if chunk:
                 file.write(chunk)
-    print("Model downloaded successfully.")
+
+    print(f"{destination} downloaded successfully from Google Drive.")
 
 
 # Check if the model file exists; if not, download it
-if not os.path.exists(MODEL_PATH):
+if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) == 0:
     print("Downloading model from Google Drive...")
     try:
         download_model_from_drive(MODEL_FILE_ID, MODEL_PATH)
+        print("Download complete, file exists:", os.path.exists(MODEL_PATH))
     except Exception as e:
         print("Failed to download model:", e)
 else:
@@ -53,17 +66,6 @@ try:
 except Exception as e:
     print("Error loading scaler:", e)
     scaler = None
-
-# Download the model if it doesn't exist locally
-if not os.path.exists(MODEL_PATH):
-    print("Downloading model from Google Drive...")
-    try:
-        download_model_from_drive(MODEL_FILE_ID, MODEL_PATH)
-        print("Download complete, file exists:", os.path.exists(MODEL_PATH))
-    except Exception as e:
-        print("Failed to download model:", e)
-else:
-    print("Model file already exists locally.")
 
 # Ensure that model and scaler are loaded before continuing
 if model is None or scaler is None:
