@@ -14,6 +14,7 @@ MODEL_FILE_ID = "1ncRbe4N6L74LXQn59snl6E9nmD_mf524"  # Replace this with your ac
 MODEL_PATH = "model.pkl"
 SCALER_PATH = "scaler.pkl"
 
+
 def download_model_from_drive(file_id, destination):
     """Download a file from Google Drive."""
     URL = f"https://drive.google.com/uc?export=download&id={file_id}"
@@ -27,20 +28,42 @@ def download_model_from_drive(file_id, destination):
                 file.write(chunk)
     print("Model downloaded successfully.")
 
-# Download the model if it doesn't exist locally
+
+# Check if the model file exists; if not, download it
 if not os.path.exists(MODEL_PATH):
     print("Downloading model from Google Drive...")
-    download_model_from_drive(MODEL_FILE_ID, MODEL_PATH)
+    try:
+        download_model_from_drive(MODEL_FILE_ID, MODEL_PATH)
+    except Exception as e:
+        print("Failed to download model:", e)
+else:
+    print("Model file already exists locally.")
 
-# Load model and scaler
-model = joblib.load(MODEL_PATH)
-scaler = joblib.load(SCALER_PATH)
+# Load the model and scaler with error handling
+try:
+    model = joblib.load(MODEL_PATH)
+    print("Model loaded successfully.")
+except Exception as e:
+    print("Error loading model:", e)
+    model = None
+
+try:
+    scaler = joblib.load(SCALER_PATH)
+    print("Scaler loaded successfully.")
+except Exception as e:
+    print("Error loading scaler:", e)
+    scaler = None
+
+# Ensure that model and scaler are loaded before continuing
+if model is None or scaler is None:
+    raise ValueError("Model or scaler failed to load. Ensure the files are available and accessible.")
 
 # Load and prepare the dataset for feature alignment
 data = pd.read_csv('cardio_train.csv', delimiter=';')
 X = data.drop(columns=['id', 'cardio'])
 y = data['cardio']
 X = pd.get_dummies(X, columns=['gender', 'cholesterol', 'gluc', 'smoke', 'alco', 'active'])
+
 
 # Function to fetch ThinkSpeak data
 def fetch_thinkspeak_data():
@@ -63,9 +86,13 @@ def fetch_thinkspeak_data():
         print("Error fetching ThinkSpeak data:", err)
         return None
 
+
 # Define prediction endpoint
 @app.route('/predict', methods=['POST'])
 def predict():
+    if model is None or scaler is None:
+        return jsonify({"error": "Model or scaler not loaded"}), 500
+
     user_data = request.get_json()
     user_data['age'] = user_data['age'] * 365  # Convert age from years to days
     user_data['height'] = user_data['height'] * 2.54  # Convert height from inches to cm
@@ -95,13 +122,20 @@ def predict():
     data_input = data_input.reindex(columns=X.columns, fill_value=0)
 
     # Scale the input data
-    data_scaled = scaler.transform(data_input)
+    try:
+        data_scaled = scaler.transform(data_input)
+    except Exception as e:
+        return jsonify({"error": f"Error scaling input data: {e}"}), 500
 
     # Predict the result
-    prediction = model.predict(data_scaled)[0]
-    result = {"prediction": int(prediction)}
+    try:
+        prediction = model.predict(data_scaled)[0]
+        result = {"prediction": int(prediction)}
+    except Exception as e:
+        return jsonify({"error": f"Error making prediction: {e}"}), 500
 
     return jsonify(result)
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
