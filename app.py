@@ -3,6 +3,8 @@ import requests
 from flask import Flask, request, jsonify
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 import joblib
 import os
 
@@ -32,12 +34,28 @@ except Exception as e:
 if model is None or scaler is None:
     raise ValueError("Model or scaler failed to load. Ensure the files are available and accessible.")
 
-# Load and prepare the dataset for feature alignment
-data = pd.read_csv('cardio_train.csv', delimiter=';')
+# Load and prepare a sample of the dataset for feature alignment
+data = pd.read_csv('cardio_train.csv', delimiter=';').sample(n=20000, random_state=42)
 X = data.drop(columns=['id', 'cardio'])
 y = data['cardio']
 X = pd.get_dummies(X, columns=['gender', 'cholesterol', 'gluc', 'smoke', 'alco', 'active'])
 
+# Train-test split (20% for testing)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Feature scaling
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# Train the model
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train, y_train)
+
+# Calculate accuracy on test data and print it to four decimal places
+y_pred = model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+print(f'Accuracy on test data: {accuracy:.4f}')
 
 # Function to fetch ThinkSpeak data
 def fetch_thinkspeak_data():
@@ -59,7 +77,6 @@ def fetch_thinkspeak_data():
     except Exception as err:
         print("Error fetching ThinkSpeak data:", err)
         return None
-
 
 # Define prediction endpoint
 @app.route('/predict', methods=['POST'])
@@ -101,15 +118,18 @@ def predict():
     except Exception as e:
         return jsonify({"error": f"Error scaling input data: {e}"}), 500
 
-    # Predict the result
+    # Predict the result and calculate probability
     try:
         prediction = model.predict(data_scaled)[0]
-        result = {"prediction": int(prediction)}
+        probability = model.predict_proba(data_scaled)[0][prediction] * 100
+        result = {
+            "prediction": int(prediction),
+            "message": f"You have a {probability:.2f}% chance of having heart disease." if prediction == 1 else f"You have a {100 - probability:.2f}% chance of not having heart disease."
+        }
     except Exception as e:
         return jsonify({"error": f"Error making prediction: {e}"}), 500
 
     return jsonify(result)
-
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
